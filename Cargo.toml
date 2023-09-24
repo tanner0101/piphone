@@ -1,0 +1,11 @@
+[package]
+name = "pi-can-phone"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+biquad = "0.4.2"
+gpio = "0.4.1"
+rodio = "0.17.1"
