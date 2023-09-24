@@ -25,8 +25,12 @@ pub fn find_device_by_name(
 #[allow(dead_code)]
 pub fn play_ring(n: usize, sink: &rodio::Sink) {
     for _ in 0..n {
-        let hi = rodio::source::SineWave::new(420.0).amplify(1.0).take_duration(time::Duration::from_secs(2));
-        let lo = rodio::source::SineWave::new(69.0).amplify(1.0).take_duration(time::Duration::from_secs(2));
+        let hi = rodio::source::SineWave::new(420.0)
+            .amplify(1.0)
+            .take_duration(time::Duration::from_secs(2));
+        let lo = rodio::source::SineWave::new(69.0)
+            .amplify(1.0)
+            .take_duration(time::Duration::from_secs(2));
         let ring_tone = hi.mix(lo) ;
         sink.append(ring_tone);
         sink.sleep_until_end();
