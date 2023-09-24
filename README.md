@@ -14,8 +14,6 @@ nmcli dev wifi connect <wifi_name> password <wifi_passwd>
 
 Give the Pi a static DHCP assignment in your router and setup port forwarding for port `5060` (voip).
 
-```
-
 Install rust.
 
 ```
