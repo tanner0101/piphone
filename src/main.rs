@@ -12,7 +12,7 @@ use rodio::cpal::traits::{HostTrait, StreamTrait};
 
 fn main() {
     let cfg = Config::new();
-    let (mic_cfg, _stream) = start_microphone(&cfg);
+    let (mic_cfg, _mic_stream) = start_microphone(&cfg);
     start_speaker(mic_cfg, &cfg);
 }
 
@@ -29,10 +29,10 @@ fn start_microphone(cfg: &Config) -> (rodio::SupportedStreamConfig, cpal::Stream
         cpal::default_host().input_devices().unwrap(),
         &cfg.input_device_name,
     ).unwrap();
-    let config = device.default_input_config().unwrap();
-    let mut filter = poormans::Filter::new(config.sample_rate().0.hz());
-    let input_stream = device.build_input_stream(
-        &config.clone().into(),
+    let mic_cfg = device.default_input_config().unwrap();
+    let mut filter = poormans::Filter::new(mic_cfg.sample_rate().0.hz());
+    let mic_stream = device.build_input_stream(
+        &mic_cfg.clone().into(),
         move |_data: &[i16], _: &cpal::InputCallbackInfo| {
             if !gpio_util::is_call_active() {
                 return;
@@ -48,11 +48,11 @@ fn start_microphone(cfg: &Config) -> (rodio::SupportedStreamConfig, cpal::Stream
     )
         .unwrap();
 
-    input_stream
+    mic_stream
         .play()
         .unwrap();
 
-    return (config, input_stream)
+    return (mic_cfg, mic_stream)
 }
 
 fn start_speaker(mic_cfg: rodio::SupportedStreamConfig, cfg: &Config) {
