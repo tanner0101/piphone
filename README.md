@@ -71,3 +71,41 @@ cargo run
  | GPIO | wPi |   Name   |  Mode  | V | Physical | V |  Mode  | Name     | wPi | GPIO |
  +------+-----+----------+--------+---+   PI3B   +---+--------+----------+-----+------+
  ```
+
+## Systemd
+
+You can use `systemd` to automatically start the phone app on boot.
+
+Create a new service file at `/etc/systemd/user/piphone.service` with the following contents.
+
+```
+[Unit]
+Description=Piphone
+After=network.target sound.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tanner/dev/piphone
+ExecStart=/usr/bin/cargo run
+Environment="PATH=/home/tanner/.cargo/bin:/usr/bin:/bin"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+`Restart` and `RestartSec` will restart the app if it crashes after 5 seconds.
+
+Next, enable the service.
+
+```
+systemctl --user enable piphone.service
+systemctl --user restart piphone.service
+```
+
+You can check the status using `status`.
+
+```
+systemctl --user status piphone.service
+```

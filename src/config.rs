@@ -10,8 +10,8 @@ impl Config {
         return Config {
             peer_addr: String::from("72.180.248.254"),
             port: 5060,
-            input_device_name: String::from("sysdefault:CARD=X"),
-            output_device_name: String::from("sysdefault:CARD=X"),
+            input_device_name: String::from("sysdefault:CARD=Device"),
+            output_device_name: String::from("sysdefault:CARD=Device"),
         }
     }
 }
