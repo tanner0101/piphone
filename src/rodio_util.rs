@@ -1,9 +1,9 @@
+use rodio::cpal;
+use rodio::DeviceTrait;
+use rodio::Source;
 use std;
 use std::thread;
 use std::time;
-use rodio::DeviceTrait;
-use rodio::Source;
-use rodio::cpal;
 
 pub fn find_device_by_name(
     devices: std::iter::Filter<rodio::Devices, fn(&<rodio::Devices as Iterator>::Item) -> bool>,
@@ -11,14 +11,16 @@ pub fn find_device_by_name(
 ) -> Option<cpal::Device> {
     for device in devices {
         let name = device.name().unwrap();
-        println!("found i/o device {}", name); 
+        println!("found i/o device {}", name);
         if name == target_name {
             println!("    -> chose {}", name);
             return Some(device);
         }
     }
 
-    return None
+    println!("ERROR: Unble to find device {}", target_name);
+
+    return None;
 }
 
 // plays a ringing noise n times
@@ -31,7 +33,7 @@ pub fn play_ring(n: usize, sink: &rodio::Sink) {
         let lo = rodio::source::SineWave::new(69.0)
             .amplify(1.0)
             .take_duration(time::Duration::from_secs(2));
-        let ring_tone = hi.mix(lo) ;
+        let ring_tone = hi.mix(lo);
         sink.append(ring_tone);
         sink.sleep_until_end();
         thread::sleep(time::Duration::from_secs(4));

@@ -1,22 +1,39 @@
+#[derive(Clone)]
 pub struct Config {
     pub peer_addr: String,
-    pub port: i32,
-    pub input_device_name: String,
-    pub output_device_name: String,
+    pub port: u32,
+    pub headset_in_device: String,
+    pub headset_out_device: String,
+    pub ring_out_device: String,
+    pub uses_gpio: bool,
 }
+
+const PORT: u32 = 5060;
+const TANNER_IP: &str = "72.180.248.254";
+const JACOB_IP: &str = "tanneristheworst.asuscomm.com"; // 72.180.246.104
 
 impl Config {
     pub fn new() -> Self {
-        return Config {
-            peer_addr: if Config::is_tanner() { 
-                String::from("72.180.246.104")
-            } else {
-                String::from("72.180.248.254")
-            },
-            port: 5060,
-            input_device_name: String::from("sysdefault:CARD=Device"),
-            output_device_name: String::from("sysdefault:CARD=Device"),
+        if Config::is_tanner() {
+            return Config {
+                peer_addr: JACOB_IP.to_string(),
+                port: PORT,
+                headset_in_device: String::from("sysdefault:CARD=Device"),
+                headset_out_device: String::from("sysdefault:CARD=Device"),
+                ring_out_device: String::from("sysdefault:CARD=Device"),
+                uses_gpio: true,
+            };
         }
+
+        // Implicitly, is_jacob()
+        return Config {
+            peer_addr: TANNER_IP.to_string(),
+            port: PORT,
+            headset_in_device: String::from("sysdefault:CARD=MV7"),
+            headset_out_device: String::from("sysdefault:CARD=MV7"),
+            ring_out_device: String::from("sysdefault:CARD="),
+            uses_gpio: false,
+        };
     }
 
     pub fn is_tanner() -> bool {
