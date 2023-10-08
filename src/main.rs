@@ -12,6 +12,7 @@ use rodio::cpal::traits::{HostTrait, StreamTrait};
 
 fn main() {
     let cfg = Config::new();
+    println!("connecting to {}:{}...", cfg.peer_addr, cfg.port);
     let (mic_cfg, _mic_stream) = start_microphone(&cfg);
     start_speaker(mic_cfg, &cfg);
 }
