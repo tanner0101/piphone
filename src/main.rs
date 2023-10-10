@@ -1,3 +1,4 @@
+mod call_state_machine;
 mod config;
 mod gpio_util;
 mod pcm;
@@ -62,6 +63,7 @@ fn start_speaker(mic_cfg: rodio::SupportedStreamConfig, cfg: &Config) {
 
     let local_addr = format!("0.0.0.0:{}", cfg.port);
     let recv_socket = net::UdpSocket::bind(local_addr).expect("Failed to bind recv socket");
+    recv_socket.set_read_timeout(dur);
 
     let device = rodio_util::find_device_by_name(
         cpal::default_host().output_devices().unwrap(),
