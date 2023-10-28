@@ -5,7 +5,6 @@ pub struct Config {
     pub headset_in_device: String,
     pub headset_out_device: String,
     pub ring_out_device: String,
-    pub uses_gpio: bool,
 }
 
 const PORT: u32 = 5060;
@@ -20,8 +19,7 @@ impl Config {
                 port: PORT,
                 headset_in_device: String::from("sysdefault:CARD=Device"),
                 headset_out_device: String::from("sysdefault:CARD=Device"),
-                ring_out_device: String::from("sysdefault:CARD=Device"),
-                uses_gpio: true,
+                ring_out_device: String::from("sysdefault:CARD=rockchiprk809"),
             };
         }
 
@@ -32,7 +30,6 @@ impl Config {
             headset_in_device: String::from("sysdefault:CARD=MV7"),
             headset_out_device: String::from("sysdefault:CARD=MV7"),
             ring_out_device: String::from("sysdefault:CARD="),
-            uses_gpio: false,
         };
     }
 

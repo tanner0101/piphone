@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use crate::net_util::PacketType;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CallState {
     Idle,
     OutgoingCall,
@@ -24,13 +26,13 @@ pub struct CallSwitch {
 }
 
 impl CallSwitch {
-    fn new() -> Self {
+    pub fn new() -> Self {
         CallSwitch {
             current_state: None,
         }
     }
 
-    fn dispatch(&mut self, new_switch_state: &CallSwitchState) -> CallSwitchEdge {
+    pub fn dispatch(&mut self, new_switch_state: &CallSwitchState) -> CallSwitchEdge {
         use CallSwitchState::*;
 
         let edge: CallSwitchEdge = match (self.current_state.as_ref(), new_switch_state) {
@@ -44,20 +46,12 @@ impl CallSwitch {
         };
 
         self.current_state = Some(new_switch_state.clone());
-
         return edge;
     }
 }
 
 pub struct Call {
     pub state: CallState,
-}
-
-#[derive(Debug)]
-pub enum PacketType {
-    Ring,
-    RingAck,
-    VoiceData,
 }
 
 impl Call {
@@ -71,11 +65,11 @@ impl Call {
         &mut self,
         packet_type: &Option<PacketType>,
         call_switch_edge: &CallSwitchEdge,
-    ) {
+    ) -> &mut Call {
         use CallState::*;
         use CallSwitchEdge::*;
         use PacketType::*;
-        self.state = match (self.state.clone(), packet_type, call_switch_edge) {
+        let new_state = match (self.state.clone(), packet_type, call_switch_edge) {
             /* First we walk through nominal path. */
 
             /* Generally nothing happening */
@@ -123,7 +117,7 @@ impl Call {
             | (InProgressCall, Some(RingAck), NoEdge)
             | (InProgressCall, _, Active) => {
                 println!(
-                    "\nERROR: CallState state machine: \n\
+                    "\nERROR: Call state machine: \n\
                     CallState: {:?}\n\
                     Packet Type: {:?}\n\
                     Call Switch: {:?}\n",
@@ -132,6 +126,12 @@ impl Call {
 
                 Idle
             }
+        };
+
+        if new_state != self.state {
+            println!("call state changed: {:?}", new_state);
         }
+        self.state = new_state;
+        return self;
     }
 }

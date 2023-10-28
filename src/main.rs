@@ -1,127 +1,113 @@
 mod call_state_machine;
 mod config;
 mod gpio_util;
-mod pcm;
-mod poormans;
+mod net_util;
+mod ring;
 mod rodio_util;
 
-use biquad::ToHertz;
-use config::Config;
-use rodio::cpal::traits::{HostTrait, StreamTrait};
-use rodio::{cpal, DeviceTrait};
-use std::{self, net};
-
 use std::sync::{Arc, RwLock};
+use std::{thread, time};
 
-use crate::call_state_machine::{Call, CallState, CallSwitchEdge, PacketType};
+use crate::call_state_machine::*;
+use crate::config::Config;
+use crate::net_util::{PacketType, ReadSocket, WriteSocket};
+use crate::ring::RingManager;
+use crate::rodio_util::{Input, Output};
 
 fn main() {
     let cfg = Config::new();
-    let call = Arc::new(RwLock::new(Call::new()));
+    let mut read_socket = ReadSocket::new(cfg.port);
+    let write_socket = WriteSocket::new(cfg.peer_addr.clone(), cfg.port);
     println!("connecting to {}:{}...", cfg.peer_addr, cfg.port);
-    let (mic_cfg, _mic_stream) = start_microphone(&cfg, Arc::clone(&call));
-    start_speaker(Arc::clone(&call), mic_cfg, &cfg);
-}
 
-fn start_microphone(
-    cfg: &Config,
-    call: Arc<RwLock<Call>>,
-) -> (rodio::SupportedStreamConfig, cpal::Stream) {
+    // setup state variables
+    let call = Arc::new(RwLock::new(Call::new()));
+    let mut call_switch = CallSwitch::new();
+    let mut ringer = RingManager::new();
+
     println!("\nstarting microphone...");
 
-    // bind to random local port for sending.
-    // remote_addr is passed in socket send_to.
-    let remote_addr = format!("{}:{}", cfg.peer_addr, cfg.port);
-    let send_socket = net::UdpSocket::bind("0.0.0.0:0").expect("Failed to bind send socket");
+    // create state and socket copies for microphone thread
+    let call_copy = Arc::clone(&call);
+    let write_socket_copy = write_socket.duplicate();
 
-    let device = rodio_util::find_device_by_name(
-        cpal::default_host().input_devices().unwrap(),
-        &cfg.headset_in_device,
-    )
-    .unwrap();
-    let cfg_wrapper = cfg.clone();
-    let mic_cfg = device.default_input_config().unwrap();
-    let mut filter = poormans::Filter::new(mic_cfg.sample_rate().0.hz());
-    let mic_stream = device
-        .build_input_stream(
-            &mic_cfg.clone().into(),
-            move |_data: &[i16], _: &cpal::InputCallbackInfo| {
-                let call_guard = call.read().unwrap();
-                let call_state = call_guard.state.clone();
-                drop(call_guard);
-
-                println!("Call state in microphone: {:?}", call_state);
-
-                if cfg_wrapper.uses_gpio && !gpio_util::is_call_active() {
-                    return;
-                }
-                let data: Vec<i16> = _data.iter().map(|x| filter.run(*x)).collect();
-                send_socket
-                    .send_to(pcm::to_buf(&data), &remote_addr)
-                    .expect("failed to send");
-            },
-            move |err| {
-                eprintln!("an error occurred on stream: {}", err);
-            },
-            Option::None,
-        )
-        .unwrap();
-
-    mic_stream.play().unwrap();
-
-    return (mic_cfg, mic_stream);
-}
-
-fn start_speaker(call: Arc<RwLock<Call>>, mic_cfg: rodio::SupportedStreamConfig, cfg: &Config) {
-    println!("\nstarting speaker...");
-
-    let local_addr = format!("0.0.0.0:{}", cfg.port);
-    let recv_socket = net::UdpSocket::bind(local_addr).expect("Failed to bind recv socket");
-
-    let device = rodio_util::find_device_by_name(
-        cpal::default_host().output_devices().unwrap(),
-        &cfg.headset_out_device,
-    )
-    .unwrap();
-    let (_os, output_stream_handle) = rodio::OutputStream::try_from_device(&device).unwrap();
-    let sink = rodio::Sink::try_new(&output_stream_handle).unwrap();
-    let mut buf = [0u8; 16_384 * 2];
-    loop {
-        let (len, _src) = recv_socket.recv_from(&mut buf).expect("failed to read");
-
-        let call_switch = CallSwitchEdge::NoEdge;
-        let packet_type: Option<PacketType> = None;
-
-        // Call dispatch with new packet header:
-        let mut call_guard = call.write().unwrap();
-        call_guard.dispatch(&packet_type, &call_switch);
-        let call_state: CallState = call_guard.state.clone();
-        drop(call_guard);
-
-        if cfg.uses_gpio && !gpio_util::is_call_active() {
-            continue;
-        }
-
+    let microphone = Input::open(&cfg.headset_in_device, move |data: &[u8]| {
+        let call_state = call_copy
+            .read()
+            .expect("failed to get call lock")
+            .state
+            .clone();
         match call_state {
             CallState::InProgressCall => {
-                let source = rodio::buffer::SamplesBuffer::new(
-                    mic_cfg.channels(),
-                    mic_cfg.sample_rate().0,
-                    pcm::from_buf(&buf, len),
-                );
-                sink.append(source);
+                write_socket_copy.send_data(PacketType::VoiceData, data);
             }
+            _ => {}
+        }
+    });
+
+    println!("\nstarting speakers...");
+
+    let headset = Output::open(&cfg.headset_in_device);
+    let speaker = Output::open(&cfg.ring_out_device);
+
+    speaker.play_start_tone();
+
+    let mut previous_call_state: Option<CallState> = None;
+    loop {
+        // read packet (if any) and check call active gpio.
+        // then dispatch state machines
+        let packet = read_socket.read();
+        let packet_type = match packet {
+            Some(packet) => Some(packet.packet_type),
+            None => None,
+        };
+        let call_switch_edge = call_switch.dispatch(&match gpio_util::read_pin("6") {
+            1 => CallSwitchState::Active,
+            _ => CallSwitchState::Inactive,
+        });
+        let call_state = call
+            .write()
+            .expect("failed to get call lock")
+            .dispatch(&packet_type, &call_switch_edge)
+            .state
+            .clone();
+
+        use CallState::*;
+
+        // stop any in-progress sounds on hang up or answer
+        match (previous_call_state, call_state) {
+            (Some(IncomingCall), Idle | InProgressCall) => speaker.stop(),
+            (Some(OutgoingCall), Idle | InProgressCall) => headset.stop(),
+            _ => {}
+        }
+
+        // reset ringer debounce if we've changed state
+        if previous_call_state != Some(call_state) {
+            ringer.reset();
+        }
+
+        // play sounds and send packets based on call state
+        match call_state {
+            CallState::InProgressCall => match packet {
+                Some(packet) => {
+                    headset.play_data(packet.data, &microphone);
+                }
+                None => {}
+            },
             CallState::IncomingCall => {
-                //ring
+                ringer.play_sound(&speaker);
+                ringer.send_packet(&write_socket, PacketType::RingAck);
             }
-
             CallState::OutgoingCall => {
-                //earpeice ring
+                ringer.play_sound(&headset);
+                ringer.send_packet(&write_socket, PacketType::Ring);
             }
-
             CallState::Idle => {
-                // do nothing
+                // avoid cpu hogging when we're not doing anything
+                thread::sleep(time::Duration::from_millis(100));
             }
         }
+
+        previous_call_state = Some(call_state);
     }
 }
