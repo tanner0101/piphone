@@ -1,3 +1,4 @@
+mod call_state_machine;
 mod config;
 mod gpio_util;
 mod pcm;
@@ -10,14 +11,22 @@ use rodio::cpal::traits::{HostTrait, StreamTrait};
 use rodio::{cpal, DeviceTrait};
 use std::{self, net};
 
+use std::sync::{Arc, RwLock};
+
+use crate::call_state_machine::{Call, CallState, CallSwitchEdge, PacketType};
+
 fn main() {
     let cfg = Config::new();
+    let call = Arc::new(RwLock::new(Call::new()));
     println!("connecting to {}:{}...", cfg.peer_addr, cfg.port);
-    let (mic_cfg, _mic_stream) = start_microphone(&cfg);
-    start_speaker(mic_cfg, &cfg);
+    let (mic_cfg, _mic_stream) = start_microphone(&cfg, Arc::clone(&call));
+    start_speaker(Arc::clone(&call), mic_cfg, &cfg);
 }
 
-fn start_microphone(cfg: &Config) -> (rodio::SupportedStreamConfig, cpal::Stream) {
+fn start_microphone(
+    cfg: &Config,
+    call: Arc<RwLock<Call>>,
+) -> (rodio::SupportedStreamConfig, cpal::Stream) {
     println!("\nstarting microphone...");
 
     // bind to random local port for sending.
@@ -37,6 +46,12 @@ fn start_microphone(cfg: &Config) -> (rodio::SupportedStreamConfig, cpal::Stream
         .build_input_stream(
             &mic_cfg.clone().into(),
             move |_data: &[i16], _: &cpal::InputCallbackInfo| {
+                let call_guard = call.read().unwrap();
+                let call_state = call_guard.state.clone();
+                drop(call_guard);
+
+                println!("Call state in microphone: {:?}", call_state);
+
                 if cfg_wrapper.uses_gpio && !gpio_util::is_call_active() {
                     return;
                 }
@@ -57,7 +72,7 @@ fn start_microphone(cfg: &Config) -> (rodio::SupportedStreamConfig, cpal::Stream
     return (mic_cfg, mic_stream);
 }
 
-fn start_speaker(mic_cfg: rodio::SupportedStreamConfig, cfg: &Config) {
+fn start_speaker(call: Arc<RwLock<Call>>, mic_cfg: rodio::SupportedStreamConfig, cfg: &Config) {
     println!("\nstarting speaker...");
 
     let local_addr = format!("0.0.0.0:{}", cfg.port);
@@ -73,15 +88,40 @@ fn start_speaker(mic_cfg: rodio::SupportedStreamConfig, cfg: &Config) {
     let mut buf = [0u8; 16_384 * 2];
     loop {
         let (len, _src) = recv_socket.recv_from(&mut buf).expect("failed to read");
+
+        let call_switch = CallSwitchEdge::NoEdge;
+        let packet_type: Option<PacketType> = None;
+
+        // Call dispatch with new packet header:
+        let mut call_guard = call.write().unwrap();
+        call_guard.dispatch(&packet_type, &call_switch);
+        let call_state: CallState = call_guard.state.clone();
+        drop(call_guard);
+
         if cfg.uses_gpio && !gpio_util::is_call_active() {
             continue;
         }
 
-        let source = rodio::buffer::SamplesBuffer::new(
-            mic_cfg.channels(),
-            mic_cfg.sample_rate().0,
-            pcm::from_buf(&buf, len),
-        );
-        sink.append(source);
+        match call_state {
+            CallState::InProgressCall => {
+                let source = rodio::buffer::SamplesBuffer::new(
+                    mic_cfg.channels(),
+                    mic_cfg.sample_rate().0,
+                    pcm::from_buf(&buf, len),
+                );
+                sink.append(source);
+            }
+            CallState::IncomingCall => {
+                //ring
+            }
+
+            CallState::OutgoingCall => {
+                //earpeice ring
+            }
+
+            CallState::Idle => {
+                // do nothing
+            }
+        }
     }
 }
