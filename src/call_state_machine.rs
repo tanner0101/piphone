@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CallState {
     Idle,
     OutgoingCall,
@@ -13,6 +13,7 @@ pub enum CallSwitchEdge {
     Inactive,
 }
 
+#[derive(Clone)]
 pub enum CallSwitchState {
     Active,
     Inactive,
@@ -30,10 +31,10 @@ impl CallSwitch {
         }
     }
 
-    fn dispatch(mut self, new_switch_state: CallSwitchState) {
+    fn dispatch(&mut self, new_switch_state: &CallSwitchState) -> CallSwitchEdge {
         use CallSwitchState::*;
 
-        let edge: CallSwitchEdge = match (self.current_state, new_switch_state) {
+        let edge: CallSwitchEdge = match (self.current_state.as_ref(), new_switch_state) {
             /* First call to dispatch */
             (None, _) => CallSwitchEdge::NoEdge,
 
@@ -43,12 +44,14 @@ impl CallSwitch {
             (Some(Active), Active) => CallSwitchEdge::NoEdge,
         };
 
-        self.current_state = Some(new_switch_state);
+        self.current_state = Some(new_switch_state.clone());
+
+        return edge;
     }
 }
 
 pub struct Call {
-    state: CallState,
+    pub state: CallState,
 }
 
 #[derive(Debug)]
@@ -59,17 +62,21 @@ pub enum PacketType {
 }
 
 impl Call {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Call {
             state: CallState::Idle,
         }
     }
 
-    fn dispatch(mut self, packet_type: Option<PacketType>, call_switch_edge: CallSwitchEdge) {
+    pub fn dispatch(
+        &mut self,
+        packet_type: &Option<PacketType>,
+        call_switch_edge: &CallSwitchEdge,
+    ) {
         use CallState::*;
         use CallSwitchEdge::*;
         use PacketType::*;
-        self.state = match (self.state, packet_type, call_switch_edge) {
+        self.state = match (self.state.clone(), packet_type, call_switch_edge) {
             /* First we walk through nominal path. */
 
             /* Generally nothing happening */
