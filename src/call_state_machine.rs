@@ -26,7 +26,6 @@ pub struct CallSwitch {
 impl CallSwitch {
     fn new() -> Self {
         CallSwitch {
-            //TODO read GPIO pin? Or set to None?
             current_state: None,
         }
     }

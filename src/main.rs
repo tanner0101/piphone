@@ -48,6 +48,7 @@ fn start_microphone(
             move |_data: &[i16], _: &cpal::InputCallbackInfo| {
                 let call_guard = call.read().unwrap();
                 let call_state = call_guard.state.clone();
+                drop(call_guard);
 
                 println!("Call state in microphone: {:?}", call_state);
 
@@ -95,6 +96,7 @@ fn start_speaker(call: Arc<RwLock<Call>>, mic_cfg: rodio::SupportedStreamConfig,
         let mut call_guard = call.write().unwrap();
         call_guard.dispatch(&packet_type, &call_switch);
         let call_state: CallState = call_guard.state.clone();
+        drop(call_guard);
 
         if cfg.uses_gpio && !gpio_util::is_call_active() {
             continue;
