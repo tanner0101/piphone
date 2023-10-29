@@ -1,4 +1,4 @@
-use std::net::UdpSocket;
+use std::{io, net::UdpSocket};
 
 pub struct WriteSocket {
     socket: UdpSocket,
@@ -45,6 +45,12 @@ pub struct ReadSocket {
     buf: [u8; 32768],
 }
 
+#[derive(Debug)]
+pub enum ReadError {
+    PacketError(PacketError),
+    IoError(io::Error),
+}
+
 impl ReadSocket {
     pub fn new(port: u32) -> ReadSocket {
         let buf: [u8; 32768] = [0u8; 16_384 * 2];
@@ -56,13 +62,21 @@ impl ReadSocket {
         return ReadSocket { socket, buf };
     }
 
-    pub fn read(&mut self) -> Option<Packet> {
+    pub fn read(&mut self) -> Result<Packet, ReadError> {
         return match self.socket.recv_from(&mut self.buf) {
-            Ok((len, _src)) => Some(Packet {
-                packet_type: PacketType::from_raw(self.buf[0]),
-                data: &self.buf[1..len],
-            }),
-            Err(_) => None,
+            Ok((len, _src)) => {
+                let packet_type = PacketType::from_raw(self.buf[0]);
+                return match packet_type {
+                    Ok(packet_type) => Ok(Packet {
+                        packet_type,
+                        data: &self.buf[1..len],
+                    }),
+                    Err(err) => {
+                        return Err(ReadError::PacketError(err));
+                    }
+                };
+            }
+            Err(err) => Err(ReadError::IoError(err)),
         };
     }
 }
@@ -80,13 +94,18 @@ pub enum PacketType {
     RingAck,
 }
 
+#[derive(Debug)]
+pub enum PacketError {
+    InvalidPacketType(u8),
+}
+
 impl PacketType {
-    pub fn from_raw(value: u8) -> PacketType {
+    pub fn from_raw(value: u8) -> Result<PacketType, PacketError> {
         return match value {
-            1 => PacketType::VoiceData,
-            2 => PacketType::Ring,
-            3 => PacketType::RingAck,
-            _ => panic!("Invalid packet type {}", value),
+            1 => Ok(PacketType::VoiceData),
+            2 => Ok(PacketType::Ring),
+            3 => Ok(PacketType::RingAck),
+            _ => Err(PacketError::InvalidPacketType(value)),
         };
     }
 

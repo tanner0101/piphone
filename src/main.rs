@@ -10,7 +10,7 @@ use std::{thread, time};
 
 use crate::call_state_machine::*;
 use crate::config::Config;
-use crate::net_util::{PacketType, ReadSocket, WriteSocket};
+use crate::net_util::{Packet, PacketType, ReadSocket, WriteSocket};
 use crate::ring::RingManager;
 use crate::rodio_util::{Input, Output};
 
@@ -56,11 +56,20 @@ fn main() {
     loop {
         // read packet (if any) and check call active gpio.
         // then dispatch state machines
-        let packet = read_socket.read();
+        let packet_res = read_socket.read();
+        let packet: Option<Packet>;
+        match packet_res {
+            Ok(_packet) => packet = Some(_packet),
+            Err(_) => {
+                // packet not ready or was invalid
+                continue;
+            }
+        }
         let packet_type = match packet {
             Some(packet) => Some(packet.packet_type),
             None => None,
         };
+
         let call_switch_edge = call_switch.dispatch(&match gpio_util::read_pin("6") {
             1 => CallSwitchState::Active,
             _ => CallSwitchState::Inactive,
