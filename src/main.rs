@@ -62,7 +62,7 @@ fn main() {
             Ok(_packet) => packet = Some(_packet),
             Err(_) => {
                 // packet not ready or was invalid
-                continue;
+                packet = None;
             }
         }
         let packet_type = match packet {
