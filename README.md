@@ -76,7 +76,7 @@ cargo run
 
 You can use `systemd` to automatically start the phone app on boot.
 
-Create a new service file at `/etc/systemd/user/piphone.service` with the following contents.
+Create a new service file at `/etc/systemd/system/piphone.service` with the following contents.
 
 ```
 [Unit]
@@ -86,7 +86,7 @@ After=network.target sound.target
 [Service]
 Type=simple
 WorkingDirectory=/home/tanner/dev/piphone
-ExecStart=/usr/bin/cargo run
+ExecStart=/usr/bin/cargo run --release
 Environment="PATH=/home/tanner/.cargo/bin:/usr/bin:/bin"
 Restart=always
 RestartSec=5
@@ -100,12 +100,12 @@ WantedBy=default.target
 Next, enable the service.
 
 ```
-systemctl --user enable piphone.service
-systemctl --user restart piphone.service
+sudo systemctl enable piphone.service
+sudo systemctl restart piphone.service
 ```
 
 You can check the status using `status`.
 
 ```
-systemctl --user status piphone.service
+systemctl status piphone.service
 ```
