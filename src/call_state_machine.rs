@@ -36,9 +36,8 @@ impl CallSwitch {
         use CallSwitchState::*;
 
         let edge: CallSwitchEdge = match (self.current_state.as_ref(), new_switch_state) {
-            /* First call to dispatch */
-            (None, _) => CallSwitchEdge::NoEdge,
-
+            (None, Active) => CallSwitchEdge::Active,
+            (None, Inactive) => CallSwitchEdge::Inactive,
             (Some(Inactive), Active) => CallSwitchEdge::Active,
             (Some(Active), Inactive) => CallSwitchEdge::Inactive,
             (Some(Inactive), Inactive) => CallSwitchEdge::NoEdge,
@@ -98,6 +97,9 @@ impl Call {
 
             /* Hangup */
             (OutgoingCall | InProgressCall, _, Inactive) => Idle,
+            
+            /* Program likely restarted during a call. */
+            (Idle, Some(VoiceData), Active) => InProgressCall,
 
             /* Somehow we called each other at the same time, just answer. */
             (OutgoingCall, Some(Ring), NoEdge) => InProgressCall,

@@ -1,6 +1,6 @@
 use rodio::cpal::traits::{HostTrait, StreamTrait};
 use rodio::{cpal, DeviceTrait, Source};
-use std::{self, thread, time};
+use std::{self, thread, time, process};
 
 pub struct Input {
     mic_cfg: rodio::SupportedStreamConfig,
@@ -25,6 +25,8 @@ impl Input {
                 },
                 move |err| {
                     eprintln!("an error occurred on stream: {}", err);
+                    // Exit process so that systemd can restart us
+                    process::exit(1);
                 },
                 Option::None,
             )
